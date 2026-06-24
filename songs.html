@@ -31,7 +31,7 @@ h1{font-size:28px;background:linear-gradient(90deg,var(--gold),var(--gold2));-we
     <h1>🎤 רשימת השירים</h1>
     <div class="sub">חפשו את השיר שלכם ובקשו מהדי-ג'יי לפי המספר</div>
   </div>
-  <input class="search" id="search" placeholder="חיפוש שיר או אומן...">
+  <input class="search" id="search" placeholder="חיפוש לפי מספר, שיר או אומן...">
   <div id="count"></div>
   <div id="list"><div class="loading"><div class="spin"></div>טוען שירים...</div></div>
 </div>
@@ -49,7 +49,11 @@ var searchEl=document.getElementById('search');
 function render(){
   var q=(searchEl.value||'').trim().toLowerCase();
   var list=SONGS;
-  if(q)list=SONGS.filter(function(s){return (s.title||'').toLowerCase().indexOf(q)>=0||(s.artist||'').toLowerCase().indexOf(q)>=0;});
+  if(q){
+    var qn=q.replace('#','').trim();
+    if(/^\d+$/.test(qn)){ list=SONGS.filter(function(s){return String(s.num)===qn;}); }
+    else { list=SONGS.filter(function(s){return (s.title||'').toLowerCase().indexOf(q)>=0||(s.artist||'').toLowerCase().indexOf(q)>=0;}); }
+  }
   document.getElementById('count').textContent=list.length+' שירים'+(q?' (מתוך '+SONGS.length+')':'');
   if(!list.length){document.getElementById('list').innerHTML='<div class="loading">לא נמצאו שירים</div>';return;}
   var groups={},order=[];
@@ -58,7 +62,7 @@ function render(){
   order.forEach(function(a){
     html+='<div class="artist-group"><div class="artist-name">'+esc(a)+' ('+groups[a].length+')</div>';
     groups[a].forEach(function(s){
-      var idx=SONGS.indexOf(s)+1;
+      var idx=(typeof s.num==='number')?s.num:(SONGS.indexOf(s)+1);
       html+='<div class="song"><span class="song-num">#'+idx+'</span><span class="song-title">'+esc(s.title)+'</span></div>';
     });
     html+='</div>';
@@ -69,7 +73,8 @@ searchEl.addEventListener('input',render);
 db.ref('songs_json').on('value',function(snap){
   var val=snap.val();
   if(val){ try{ SONGS=JSON.parse(val); }catch(e){ SONGS=[]; } }
-  if(!SONGS||!SONGS.length)SONGS=SEED.map(function(s,i){return {id:'s'+i,artist:s.artist||'',title:s.title};});
+  if(!SONGS||!SONGS.length)SONGS=SEED.map(function(s,i){return {id:'s'+i,artist:s.artist||'',title:s.title,num:i+1};});
+  var mx=0;SONGS.forEach(function(s){if(typeof s.num==='number'&&s.num>mx)mx=s.num;});SONGS.forEach(function(s){if(typeof s.num!=='number'){mx++;s.num=mx;}});
   render();
 },function(err){
   document.getElementById('list').innerHTML='<div class="loading" style="color:#ff5d8f">שגיאת חיבור<br>מציג רשימה מקומית</div>';
