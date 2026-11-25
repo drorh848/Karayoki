@@ -92,6 +92,8 @@ window.addEventListener('unhandledrejection',function(e){
     <h1>🎤 ניהול קריוקי</h1>
     <div class="actions">
       <button class="gbtn" id="qrBtn">📱 קוד QR למשתתפים</button>
+      <button class="gbtn primary" id="syncBtn">🔄 עדכן שירים מהתיקיות</button>
+      <input type="file" id="syncInput" accept=".json,application/json" style="display:none">
       <button class="gbtn" id="wordBtn">📄 ייצוא לוורד</button>
       <button class="gbtn" id="backupBtn">💾 הורד גיבוי</button>
       <label class="gbtn" for="restoreInput" style="cursor:pointer">♻️ שחזר מגיבוי</label>
@@ -233,6 +235,7 @@ db.ref('songs_json').on('value',function(snap){
   try{ SONGS=JSON.parse(val); }catch(e){ SONGS=SEED.map(function(s,i){return {id:'s'+i,artist:s.artist||'',title:s.title,num:i+1};}); }
   ensureNums();
   renderSongs();
+  if(!window._backupChecked){ window._backupChecked=true; setTimeout(checkAutoBackup,3000); }
 },function(err){
   document.getElementById('songList').innerHTML='<div class="loading" style="color:var(--hot)">שגיאת חיבור: '+(err.code||err.message||'')+'<br>מציג רשימה מקומית</div>';
   SONGS=SEED.map(function(s,i){return {id:'s'+i,artist:s.artist||'',title:s.title};});
@@ -382,6 +385,78 @@ document.getElementById('qrCopy').onclick=function(){
 
 /* ===== backup / restore ===== */
 /* ===== ייצוא לוורד ===== */
+/* ===== עדכן שירים מהתיקיות (index.json) ===== */
+document.getElementById('syncBtn').onclick=function(){
+  document.getElementById('syncInput').click();
+};
+document.getElementById('syncInput').onchange=function(e){
+  var file=e.target.files[0];
+  if(!file)return;
+  var reader=new FileReader();
+  reader.onload=function(ev){
+    var data;
+    try{ data=JSON.parse(ev.target.result); }
+    catch(err){ toast('הקובץ אינו תקין'); e.target.value=''; return; }
+    if(!data.groups){ toast('קובץ לא מתאים (חסר groups)'); e.target.value=''; return; }
+    /* בנה רשימת שירים חדשה מהתיקיות */
+    var newSongs=[], n=0;
+    Object.keys(data.groups).forEach(function(artist){
+      var g=data.groups[artist];
+      (g.songs||[]).forEach(function(s){
+        n++;
+        newSongs.push({
+          id:uid(),
+          artist:artist,
+          title:s.title||s.file||'',
+          num:n,
+          path:s.path||'',        /* נתיב הקובץ - לשלב ההפעלה */
+          cat:g.category||''
+        });
+      });
+    });
+    if(!newSongs.length){ toast('לא נמצאו שירים בקובץ'); e.target.value=''; return; }
+    if(!confirm('לעדכן את הרשימה ל-'+newSongs.length+' שירים מהתיקיות?\nהרשימה הנוכחית תוחלף.')){ e.target.value=''; return; }
+    /* גיבוי לפני החלפה + שמירה */
+    saveBackup(function(){
+      SONGS=newSongs;
+      saveSongs().then(function(){
+        toast('הרשימה עודכנה! '+newSongs.length+' שירים');
+        renderSongs();
+      }).catch(function(){ toast('שגיאה בשמירה'); });
+    });
+    e.target.value='';
+  };
+  reader.readAsText(file,'UTF-8');
+};
+
+/* ===== גיבוי אוטומטי ל-Firebase (3 אחרונים, כל חודשיים) ===== */
+function saveBackup(done){
+  var entry={ at:Date.now(), count:SONGS.length, songs:JSON.stringify(SONGS) };
+  db.ref('backups').once('value',function(snap){
+    var arr=snap.val();
+    try{ arr=arr?JSON.parse(arr):[]; }catch(e){ arr=[]; }
+    if(!Array.isArray(arr))arr=[];
+    arr.push(entry);
+    while(arr.length>3)arr.shift();         /* שמור רק 3 אחרונים */
+    db.ref('backups').set(JSON.stringify(arr)).then(function(){
+      if(done)done();
+    }).catch(function(){ if(done)done(); });  /* גם אם גיבוי נכשל, המשך */
+  },function(){ if(done)done(); });
+}
+
+function checkAutoBackup(){
+  db.ref('backups').once('value',function(snap){
+    var arr=snap.val();
+    try{ arr=arr?JSON.parse(arr):[]; }catch(e){ arr=[]; }
+    if(!Array.isArray(arr))arr=[];
+    var last=arr.length?arr[arr.length-1].at:0;
+    var TWO_MONTHS=60*24*60*60*1000;         /* ~60 יום */
+    if(Date.now()-last>TWO_MONTHS && SONGS.length){
+      saveBackup(function(){ /* שקט - בלי הודעה */ });
+    }
+  });
+}
+
 document.getElementById('wordBtn').onclick=function(){
   if(!SONGS.length){toast('אין שירים לייצוא');return;}
   /* קיבוץ לפי אומן */
