@@ -30,6 +30,8 @@ h1{font-size:26px;background:linear-gradient(90deg,var(--gold),var(--gold2));-we
 .song-title{flex:1;font-size:15px}
 .iconbtn{background:var(--card2);border:1px solid var(--bd);color:var(--txt);width:38px;height:38px;border-radius:10px;font-size:16px;cursor:pointer}
 .iconbtn.del:active{background:var(--hot)}
+.playbtn{background:linear-gradient(90deg,var(--gold),var(--gold2));border:none;color:#2a1500;min-width:64px;height:38px;border-radius:10px;font-size:18px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:4px}
+.playbtn:active{transform:scale(.94)}
 .loading{text-align:center;color:var(--muted);padding:40px 0;font-size:16px}
 .spin{width:40px;height:40px;border:4px solid var(--bd);border-top-color:var(--gold);border-radius:50%;margin:0 auto 14px;animation:sp 1s linear infinite}
 @keyframes sp{to{transform:rotate(360deg)}}
@@ -270,7 +272,9 @@ function renderSongs(){
     html+='<div class="artist-group"><div class="artist-name">'+esc(a)+' ('+groups[a].length+')</div>';
     groups[a].forEach(function(s){
       var idx=(typeof s.num==='number')?s.num:(SONGS.indexOf(s)+1);
+      var playBtn = s.path ? '<button class="playbtn" data-play="'+s.id+'">▶</button>' : '';
       html+='<div class="song"><span class="song-num">#'+idx+'</span><span class="song-title">'+esc(s.title)+'</span>'+
+        playBtn+
         '<button class="iconbtn" data-edit="'+s.id+'">✏️</button>'+
         '<button class="iconbtn del" data-del="'+s.id+'">🗑️</button></div>';
     });
@@ -280,11 +284,33 @@ function renderSongs(){
 }
 songSearchEl.addEventListener('input',renderSongs);
 
-/* event delegation for edit/del */
+/* event delegation for play/edit/del */
 document.getElementById('songList').addEventListener('click',function(e){
+  var pl=e.target.getAttribute('data-play');
   var ed=e.target.getAttribute('data-edit'); var dl=e.target.getAttribute('data-del');
-  if(ed)openEdit(ed); if(dl)askDelete(dl);
+  if(pl)playSong(pl); if(ed)openEdit(ed); if(dl)askDelete(dl);
 });
+
+/* ===== הפעלת שיר דרך הגשר המקומי ===== */
+var BRIDGE='http://127.0.0.1:7777';
+function playSong(id){
+  var s=SONGS.filter(function(x){return x.id===id;})[0];
+  if(!s||!s.path){ toast('לשיר זה אין קובץ'); return; }
+  var img=new Image();
+  var done=false;
+  var t=setTimeout(function(){
+    if(done)return; done=true;
+    toast('⚠ הגשר לא פועל - הפעל את "גשר" במחשב');
+  },2500);
+  /* קריאה לגשר דרך טעינת תמונה - עוקף חסימות mixed-content */
+  img.onload=img.onerror=function(){
+    /* onerror צפוי כי התשובה אינה תמונה - זה עדיין אומר שהבקשה הגיעה */
+  };
+  /* שימוש ב-fetch עם no-cors כדי לשלוח את הבקשה */
+  fetch(BRIDGE+'/play?path='+encodeURIComponent(s.path),{mode:'no-cors'})
+    .then(function(){ if(done)return; done=true; clearTimeout(t); toast('▶ מנגן: '+s.title); })
+    .catch(function(){ if(done)return; done=true; clearTimeout(t); toast('⚠ הגשר לא פועל - הפעל את "גשר" במחשב'); });
+}
 
 /* ===== add/edit ===== */
 var editOv=document.getElementById('editOv'), editId=null;
