@@ -144,13 +144,19 @@ db.ref('settings').on('value',function(snap){
   if(!REQ_ON)document.getElementById('reqOv').classList.remove('show');
   if(was!==REQ_ON)render();
 },function(){});
-/* התור — כדי לספור כמה בקשות ממתינות יש לטלפון הזה */
+/* כל הבקשות של הערב — כל בקשה נספרת (ממתינה, בוצעה או נמחקה) */
 db.ref('requests').on('value',function(snap){
   var arr=[];
   snap.forEach(function(c){arr.push(c.val()||{});});
   REQS=arr;
 },function(){});
-function myPending(){return REQS.filter(function(r){return r.dev===DEV;}).length;}
+function normName(f,l){return ((f||'')+' '+(l||'')).replace(/\s+/g,' ').trim().toLowerCase();}
+/* זיהוי לפי הטלפון או לפי השם המלא */
+function myCount(first,last){
+  var nm=(first||last)?normName(first,last):'';
+  return REQS.filter(function(r){return r.dev===DEV||(nm&&normName(r.first,r.last)===nm);}).length;
+}
+var LIMIT_MSG='ניצלת את הבקשות שלך לערב הזה 🎤';
 
 /* ===== חלון בקשה ===== */
 var reqOv=document.getElementById('reqOv'), reqSongObj=null;
@@ -159,7 +165,7 @@ document.getElementById('list').addEventListener('click',function(e){
   var b=e.target.closest('button'); if(!b)return;
   var n=parseInt(b.getAttribute('data-req'),10); if(!n)return;
   if(!REQ_ON){toast('בקשות שירים סגורות כרגע',true);return;}
-  if(myPending()>=MAX_REQ){toast('יש לך כבר '+MAX_REQ+' בקשות בתור. אפשר לבקש שוב אחרי שתשיר 🎤',true);return;}
+  if(myCount(lsGet('kar_first'),lsGet('kar_last'))>=MAX_REQ){toast(LIMIT_MSG,true);return;}
   var s=songByNum(n); if(!s)return;
   reqSongObj=s;
   document.getElementById('reqSong').innerHTML='<b>#'+s.num+'</b> '+esc(s.title)+(s.artist?' — '+esc(s.artist):'');
@@ -178,10 +184,8 @@ document.getElementById('reqSend').onclick=function(){
   var last=document.getElementById('rLast').value.trim().slice(0,25);
   if(!first||!last){err.textContent='יש למלא שם פרטי ושם משפחה';return;}
   if(!REQ_ON){err.textContent='בקשות שירים סגורות כרגע';return;}
-  if(myPending()>=MAX_REQ){err.textContent='הגעת למקסימום '+MAX_REQ+' בקשות בתור';return;}
+  if(myCount(first,last)>=MAX_REQ){err.textContent=LIMIT_MSG;return;}
   var s=reqSongObj; if(!s)return;
-  /* אותו שיר כבר מבוקש מהטלפון הזה */
-  if(REQS.some(function(r){return r.dev===DEV&&r.num===s.num;})){err.textContent='כבר ביקשת את השיר הזה';return;}
   lsSet('kar_first',first); lsSet('kar_last',last);
   var btn=document.getElementById('reqSend'); btn.disabled=true;
   db.ref('requests').push({

@@ -137,7 +137,7 @@ window.addEventListener('unhandledrejection',function(e){
         <span class="ctrl-state" id="reqState">כבוי</span>
       </div>
       <div class="ctrl-item">
-        <span>מקסימום בקשות לטלפון:</span>
+        <span>מקסימום בקשות לאדם בערב:</span>
         <select id="maxSel"></select>
       </div>
     </div>
@@ -171,8 +171,9 @@ window.addEventListener('unhandledrejection',function(e){
       <h3>📱 משתתפים</h3>
       <div class="tgrid">
         <button class="gbtn" id="qrBtn">📱 קוד QR למשתתפים</button>
-        <button class="gbtn danger" id="clearQueueBtn">🧹 נקה את כל התור</button>
+        <button class="gbtn danger" id="clearQueueBtn">🆕 התחל ערב חדש</button>
       </div>
+      <div class="tnote">"התחל ערב חדש" מוחק את כל הבקשות ומאפס את המכסה של כל המשתתפים. לוחצים בתחילת כל אירוע.</div>
     </div>
     <div class="tsec">
       <h3>🎵 מאגר השירים</h3>
@@ -373,7 +374,7 @@ document.getElementById('reqToggle').onchange=function(e){
 document.getElementById('maxSel').onchange=function(e){
   var n=parseInt(e.target.value,10);
   db.ref('settings/maxRequests').set(n).then(function(){
-    toast('מקסימום '+n+' בקשות לטלפון');
+    toast('מקסימום '+n+' בקשות לאדם בערב');
   }).catch(function(err){
     toast(permErr(err)?'אין הרשאה לשנות הגדרות':'שגיאה בשמירה');
     renderCtrl();
@@ -445,19 +446,21 @@ function waitText(at){
   if(m<60)return 'ממתין '+m+' דק\'';
   return 'ממתין '+Math.floor(m/60)+' ש\' '+(m%60)+' דק\'';
 }
+/* בקשות שבוצעו/נמחקו נשארות במסד (כדי לספור את המכסה) אבל לא מוצגות בתור */
+function activeReqs(){return REQS.filter(function(r){return r.status!=='done'&&r.status!=='deleted';});}
 function renderQueue(){
   var badge=document.getElementById('qBadge');
-  var pending=REQS.filter(function(r){return r.status!=='playing';}).length;
-  badge.textContent=REQS.length;
-  badge.classList.toggle('show',REQS.length>0);
+  var act=activeReqs();
+  badge.textContent=act.length;
+  badge.classList.toggle('show',act.length>0);
   var el=document.getElementById('queueList');
-  document.getElementById('qHint').textContent=REQS.length?('לפי סדר הגעה — הראשון למעלה. ממתינים: '+pending):'לפי סדר הגעה — הראשון למעלה.';
-  if(!REQS.length){
+  document.getElementById('qHint').textContent=act.length?('לפי סדר הגעה — הראשון למעלה. בתור: '+act.length):'לפי סדר הגעה — הראשון למעלה.';
+  if(!act.length){
     el.innerHTML='<div class="loading">'+(SETTINGS.requestsEnabled?'אין בקשות בתור':'אין בקשות בתור<br><span style="font-size:14px">בקשות משתתפים כבויות כרגע</span>')+'</div>';
     return;
   }
   var html='';
-  REQS.forEach(function(r,i){
+  act.forEach(function(r,i){
     var s=songByNum(r.num);
     var canPlay=!!(s&&s.path);
     var playing=r.status==='playing';
@@ -486,17 +489,17 @@ document.getElementById('queueList').addEventListener('click',function(e){
     var s=songByNum(r.num); if(!s)return;
     playSong(s.id,function(){ db.ref('requests/'+k+'/status').set('playing').catch(function(){}); });
   }else if((k=el.getAttribute('data-qdone'))){
-    db.ref('requests/'+k).remove().catch(function(){toast('שגיאה במחיקה');});
+    db.ref('requests/'+k+'/status').set('done').catch(function(){toast('שגיאה בעדכון');});
   }else if((k=el.getAttribute('data-qdel'))){
     var r2=REQS.filter(function(x){return x.key===k;})[0];
     if(!confirm('למחוק את הבקשה של '+((r2&&r2.first)||'')+' '+((r2&&r2.last)||'')+'?'))return;
-    db.ref('requests/'+k).remove().then(function(){toast('הבקשה נמחקה');}).catch(function(){toast('שגיאה במחיקה');});
+    db.ref('requests/'+k+'/status').set('deleted').then(function(){toast('הבקשה נמחקה');}).catch(function(){toast('שגיאה במחיקה');});
   }
 });
 document.getElementById('clearQueueBtn').onclick=function(){
-  if(!REQS.length){toast('התור כבר ריק');return;}
-  if(!confirm('לנקות את כל '+REQS.length+' הבקשות מהתור?'))return;
-  db.ref('requests').remove().then(function(){toast('התור נוקה');}).catch(function(){toast('שגיאה בניקוי');});
+  if(!REQS.length){toast('אין בקשות — אפשר להתחיל');return;}
+  if(!confirm('להתחיל ערב חדש?\nכל הבקשות יימחקו והמכסה של כל המשתתפים תתאפס.'))return;
+  db.ref('requests').remove().then(function(){toast('🆕 ערב חדש — המכסות אופסו');}).catch(function(){toast('שגיאה באיפוס');});
 };
 
 /* ===== add/edit ===== */
